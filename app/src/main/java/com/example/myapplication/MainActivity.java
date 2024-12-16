@@ -21,11 +21,19 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+
+import com.frostwire.jlibtorrent.TorrentInfo;
 import com.github.se_bastiaan.torrentstream.StreamStatus;
 import com.github.se_bastiaan.torrentstream.Torrent;
 import com.github.se_bastiaan.torrentstream.TorrentOptions;
 import com.github.se_bastiaan.torrentstream.TorrentStream;
 import com.github.se_bastiaan.torrentstream.listeners.TorrentListener;
+
+import java.net.URL;
+import java.net.URLConnection;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.util.Date;
 
 import java.io.File;
 
@@ -36,11 +44,12 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
     private ProgressBar progressbar;
     private TorrentStream torrentStream;
     private TextView statusText;
+    private TextView torrentTV;
     private Button startButton;
     private Handler progressHandler;
     private long lastToastTime = 0;
 
-    private static final String TORRENT_URL = "magnet:?xt=urn:btih:88594aaacbde40ef3e2510c47374ec0aa396c08e&dn=bbb%5Fsunflower%5F1080p%5F30fps%5Fnormal.mp4&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.publicbt.com%3A80%2Fannounce&ws=http%3A%2F%2Fdistribution.bbb3d.renderfarming.net%2Fvideo%2Fmp4%2Fbbb%5Fsunflower%5F1080p%5F30fps%5Fnormal.mp4";
+    private static final String TORRENT_URL = "https://webtorrent.io/torrents/big-buck-bunny.torrent";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,6 +60,7 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
         // Initialize views and handler
         statusText = findViewById(R.id.status_text);
         startButton = findViewById(R.id.start_button);
+        torrentTV = findViewById(R.id.TVTorrentInfo);
         progressbar = findViewById(R.id.progressBar2);
         progressHandler = new Handler();
 
@@ -139,7 +149,6 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
             Log.e(TAG, errorMsg, e);
         }
     }
-
     public void download(View view) {
         if (torrentStream == null) {
             Toast.makeText(this, "TorrentStream not initialized. Retrying initialization...", Toast.LENGTH_SHORT).show();
@@ -152,6 +161,38 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
                 view.setEnabled(false);
                 Toast.makeText(this, "Starting download...", Toast.LENGTH_SHORT).show();
                 Log.d(TAG, "Starting torrent stream with URL: " + TORRENT_URL);
+
+                // Use a separate thread to fetch torrent info
+                new Thread(() -> {
+                    try {
+                        // Use reflection to access the private getTorrentInfo method
+                        java.lang.reflect.Method getTorrentInfoMethod =
+                                TorrentStream.class.getDeclaredMethod("getTorrentInfo", String.class);
+                        getTorrentInfoMethod.setAccessible(true);
+                        TorrentInfo torrentInfo = (TorrentInfo) getTorrentInfoMethod.invoke(torrentStream, TORRENT_URL);
+
+                        if (torrentInfo != null) {
+                            runOnUiThread(() -> {
+                                String infoText = "Torrent Info:\n" +
+                                        "Name: " + torrentInfo.name() + "\n" +
+                                        "Total Size: " + (torrentInfo.totalSize() / (1024 * 1024)) + " MB\n" +
+                                        "Number of Files: " + torrentInfo.numFiles() + "\n" +
+                                        "Creation Date: " + torrentInfo.creationDate() + "\n" +
+                                        "Piece Length: " + (torrentInfo.pieceLength() / 1024) + " KB\n" +
+                                        "Num Pieces: " + torrentInfo.numPieces();
+
+                                torrentTV.setText(infoText);
+                            });
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error getting torrent info", e);
+                        runOnUiThread(() -> {
+                            torrentTV.setText("Could not retrieve torrent info: " + e.getMessage());
+                        });
+                    }
+                }).start();
+
+                // Start the actual torrent stream
                 torrentStream.startStream(TORRENT_URL);
             } catch (Exception e) {
                 String errorMsg = "Error starting download: " + e.getMessage();
@@ -176,10 +217,7 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
     }
 
     private void updateStatus(String status) {
-        runOnUiThread(() -> {
-            statusText.setText(status);
-            Log.d(TAG, status);
-        });
+        runOnUiThread(() -> statusText.setText(status));
     }
 
     // TorrentListener implementation
@@ -191,6 +229,7 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
 
     @Override
     public void onStreamStarted(Torrent torrent) {
+        statusText.setText("Download started");
         updateStatus("Stream started");
         showProgressToast("Download started");
     }
@@ -211,12 +250,14 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
 
     @Override
     public void onStreamProgress(Torrent torrent, StreamStatus status) {
-        String progress = String.format("Progress: %.2f%% Speed: %.2f MB/s Seeds: %d",
-                status.progress * 100,
-                status.downloadSpeed / 1024.0 / 1024.0,
-                status.seeds);
-        updateStatus(progress);
-        showProgressToast(String.format("Downloaded: %.1f%%", status.progress * 100));
+        runOnUiThread(() -> {
+            String progressText = String.format("Progress: %.2f%%\nSpeed: %.2f MB/s\nSeeds: %d",
+                    status.progress,
+                    status.downloadSpeed / (1024.0 * 1024.0),
+                    status.seeds);
+            statusText.setText(progressText);
+            progressbar.setProgress((int) status.progress);
+        });
     }
 
     @Override
