@@ -1,6 +1,7 @@
 package com.example.myapplication;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Environment;
@@ -11,6 +12,8 @@ import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.net.Uri;
+import android.widget.VideoView;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
@@ -41,6 +44,7 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
     private static final String TAG = "MainActivity";
     private static final int STORAGE_PERMISSION_CODE = 101;
 
+    private VideoView videoView;
     private ProgressBar progressbar;
     private TorrentStream torrentStream;
     private TextView statusText;
@@ -48,6 +52,7 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
     private Button startButton;
     private Handler progressHandler;
     private long lastToastTime = 0;
+    private TorrentInfo torrentInfo;
 
     private static final String TORRENT_URL = "https://webtorrent.io/torrents/big-buck-bunny.torrent";
 
@@ -62,6 +67,8 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
         startButton = findViewById(R.id.start_button);
         torrentTV = findViewById(R.id.TVTorrentInfo);
         progressbar = findViewById(R.id.progressBar2);
+        videoView = findViewById(R.id.video_view);
+
         progressHandler = new Handler();
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -165,11 +172,13 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
                 // Use a separate thread to fetch torrent info
                 new Thread(() -> {
                     try {
-                        // Use reflection to access the private getTorrentInfo method
+                        // Use reflection once to get the torrent info
                         java.lang.reflect.Method getTorrentInfoMethod =
                                 TorrentStream.class.getDeclaredMethod("getTorrentInfo", String.class);
                         getTorrentInfoMethod.setAccessible(true);
-                        TorrentInfo torrentInfo = (TorrentInfo) getTorrentInfoMethod.invoke(torrentStream, TORRENT_URL);
+
+                        // Store the result in our class-level field
+                        torrentInfo = (TorrentInfo) getTorrentInfoMethod.invoke(torrentStream, TORRENT_URL);
 
                         if (torrentInfo != null) {
                             runOnUiThread(() -> {
@@ -204,7 +213,6 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
             Toast.makeText(this, "Download already in progress", Toast.LENGTH_SHORT).show();
         }
     }
-
     private void showProgressToast(String message) {
         long currentTime = System.currentTimeMillis();
         // Only show toast if more than 1 second has passed since last toast
@@ -215,6 +223,29 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
             lastToastTime = currentTime;
         }
     }
+
+    private File findVideoFile(File directory){
+        final String[] videoExtensions = {
+                ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v",
+                ".3gp", ".3g2", ".mpeg", ".mpg", ".m2v", ".ts", ".mts", ".vob"
+        };
+
+        File[] files = directory.listFiles();
+        if (files!=null){
+            for (File file : files){
+                String fileName = file.getName().toLowerCase();
+                for (String extension : videoExtensions){
+                    if (fileName.endsWith(extension)){
+                        Log.d(TAG, file.getName() +"\n" + file.getAbsolutePath());
+                        return file;
+                    }
+                }
+            }
+        }
+        Log.d(TAG, "couldnt find file");
+        return null;
+    }
+
 
     private void updateStatus(String status) {
         runOnUiThread(() -> statusText.setText(status));
@@ -250,14 +281,31 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
 
     @Override
     public void onStreamProgress(Torrent torrent, StreamStatus status) {
-        runOnUiThread(() -> {
+        Log.d("TorrentProgress", "Progress: " + status.progress);
             String progressText = String.format("Progress: %.2f%%\nSpeed: %.2f MB/s\nSeeds: %d",
                     status.progress,
                     status.downloadSpeed / (1024.0 * 1024.0),
                     status.seeds);
             statusText.setText(progressText);
             progressbar.setProgress((int) status.progress);
-        });
+
+                // Start playing video when enough is downloaded (e.g., 20%)
+        if (status.progress >= 100.0 && videoView.getDuration() == -1 && !videoView.isPlaying()) {
+            File torrentStreamDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "TorrentStream");
+            File torrentSubDir = new File(torrentStreamDir, torrentInfo.name());
+            File videoFile = findVideoFile(torrentSubDir);
+
+            if (videoFile != null && videoFile.exists()) {
+                Uri videoUri = Uri.parse(videoFile.getAbsolutePath());
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(videoUri, "video/*");
+                startActivity(Intent.createChooser(intent, "Open video with"));
+                Log.d(TAG, "Video playback started for file: " + videoFile.getAbsolutePath());
+            } else {
+                Log.e(TAG, "Video file is null or does not exist");
+            }
+        }
+
     }
 
     @Override

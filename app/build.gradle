@@ -31,7 +31,6 @@ android {
 dependencies {
     def torrentStreamVersion = "2.7.0"  // Replace with the latest version
     implementation "com.github.TorrentStream:TorrentStream-Android:${torrentStreamVersion}"
-
     implementation libs.appcompat
     implementation libs.material
     implementation libs.activity
