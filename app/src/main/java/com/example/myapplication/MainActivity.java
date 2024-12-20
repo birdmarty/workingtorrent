@@ -13,7 +13,6 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.net.Uri;
-import android.widget.VideoView;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
@@ -32,19 +31,13 @@ import com.github.se_bastiaan.torrentstream.TorrentOptions;
 import com.github.se_bastiaan.torrentstream.TorrentStream;
 import com.github.se_bastiaan.torrentstream.listeners.TorrentListener;
 
-import java.net.URL;
-import java.net.URLConnection;
-import java.io.InputStream;
-import java.io.ByteArrayOutputStream;
-import java.util.Date;
-
 import java.io.File;
 
 public class MainActivity extends AppCompatActivity implements TorrentListener {
     private static final String TAG = "MainActivity";
     private static final int STORAGE_PERMISSION_CODE = 101;
 
-    private VideoView videoView;
+//    private VideoView videoView;
     private ProgressBar progressbar;
     private TorrentStream torrentStream;
     private TextView statusText;
@@ -67,7 +60,7 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
         startButton = findViewById(R.id.start_button);
         torrentTV = findViewById(R.id.TVTorrentInfo);
         progressbar = findViewById(R.id.progressBar2);
-        videoView = findViewById(R.id.video_view);
+//        videoView = findViewById(R.id.video_view);
 
         progressHandler = new Handler();
 
@@ -290,7 +283,7 @@ public class MainActivity extends AppCompatActivity implements TorrentListener {
             progressbar.setProgress((int) status.progress);
 
                 // Start playing video when enough is downloaded (e.g., 20%)
-        if (status.progress >= 100.0 && videoView.getDuration() == -1 && !videoView.isPlaying()) {
+        if (status.progress >= 100.0 ) {
             File torrentStreamDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "TorrentStream");
             File torrentSubDir = new File(torrentStreamDir, torrentInfo.name());
             File videoFile = findVideoFile(torrentSubDir);
